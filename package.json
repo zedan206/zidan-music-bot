@@ -4,17 +4,16 @@
   "description": "بوت ديسكورد لتشغيل الموسيقى في القنوات الصوتية",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js",
-    "dev": "nodemon index.js"
+    "start": "node index.js"
   },
   "dependencies": {
     "discord.js": "^14.16.3",
     "distube": "^5.0.7",
     "@distube/yt-dlp": "^1.0.4",
+    "@discordjs/voice": "^0.17.0",
+    "@discordjs/opus": "^0.9.0",
+    "ffmpeg-static": "^5.2.0",
     "dotenv": "^16.4.5"
-  },
-  "devDependencies": {
-    "nodemon": "^3.1.7"
   },
   "engines": {
     "node": ">=18.0.0"
