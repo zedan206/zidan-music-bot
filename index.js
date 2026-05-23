@@ -2,11 +2,22 @@ require('dotenv').config();
 const ffmpegStatic = require('ffmpeg-static');
 process.env.FFMPEG_PATH = ffmpegStatic;
 
+const http = require('http');
 const { Client, GatewayIntentBits, EmbedBuilder, ActivityType } = require('discord.js');
 const { DisTube } = require('distube');
 const { YtDlpPlugin } = require('@distube/yt-dlp');
 const { joinVoiceChannel, VoiceConnectionStatus, entersState, getVoiceConnection } = require('@discordjs/voice');
 
+// ─── سيرفر HTTP لإرضاء Render ────────────────────────────────────
+const PORT = process.env.PORT || 3000;
+http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/plain' });
+  res.end('🎵 Bot is alive!');
+}).listen(PORT, () => {
+  console.log(`🌐 HTTP server running on port ${PORT}`);
+});
+
+// ─── إنشاء الكلايانت ──────────────────────────────────────────────
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -16,9 +27,8 @@ const client = new Client({
   ],
 });
 
+// ─── إنشاء DisTube ────────────────────────────────────────────────
 const distube = new DisTube(client, {
-  searchSongs: 5,
-  searchCooldown: 30,
   emitNewSongOnly: true,
   joinNewVoiceChannel: true,
   nsfw: false,
@@ -34,11 +44,13 @@ function errorEmbed(description) {
   return new EmbedBuilder().setColor('#FF6B6B').setDescription(description);
 }
 
+// ─── رسالة الجاهزية ───────────────────────────────────────────────
 client.once('ready', () => {
   console.log(`✅ البوت جاهز: ${client.user.tag}`);
   client.user.setActivity('🎵 الموسيقى | !help', { type: ActivityType.Listening });
 });
 
+// ─── استقبال الأوامر ──────────────────────────────────────────────
 client.on('messageCreate', async (message) => {
   if (message.author.bot || !message.guild) return;
   if (!message.content.startsWith(PREFIX)) return;
@@ -47,7 +59,7 @@ client.on('messageCreate', async (message) => {
   const command = args.shift().toLowerCase();
   const voiceChannel = message.member?.voice?.channel;
 
-  // ─── !join ──────────────────────────────────────────────────────
+  // ─── !join ────────────────────────────────────────────────────
   if (command === 'join' || command === 'j') {
     if (!voiceChannel) {
       return message.reply({ embeds: [errorEmbed('🔇 ادخل قناة صوتية أولاً!')] });
@@ -68,41 +80,34 @@ client.on('messageCreate', async (message) => {
         ],
       });
     } catch {
-      message.reply({ embeds: [errorEmbed('❌ فشل الانضمام إلى القناة الصوتية.')] });
+      message.reply({ embeds: [errorEmbed('❌ فشل الانضمام للقناة الصوتية.')] });
     }
   }
 
-  // ─── !leave ─────────────────────────────────────────────────────
+  // ─── !leave ───────────────────────────────────────────────────
   else if (command === 'leave' || command === 'dc') {
     const queue = distube.getQueue(message.guildId);
     if (queue) distube.stop(message.guildId);
-
     const connection = getVoiceConnection(message.guild.id);
     if (connection) {
       connection.destroy();
       message.reply({
-        embeds: [
-          new EmbedBuilder()
-            .setColor('#FF6B6B')
-            .setDescription('👋 غادرت القناة الصوتية.'),
-        ],
+        embeds: [new EmbedBuilder().setColor('#FF6B6B').setDescription('👋 غادرت القناة الصوتية.')],
       });
     } else {
       message.reply({ embeds: [errorEmbed('📭 البوت ليس في أي قناة صوتية!')] });
     }
   }
 
-  // ─── !play ──────────────────────────────────────────────────────
+  // ─── !play ────────────────────────────────────────────────────
   else if (command === 'play' || command === 'p') {
     const query = args.join(' ');
-
     if (!query) {
       return message.reply({ embeds: [errorEmbed('❌ اكتب اسم أغنية أو رابط بعد `!play`')] });
     }
     if (!voiceChannel) {
       return message.reply({ embeds: [errorEmbed('🔇 ادخل قناة صوتية أولاً!')] });
     }
-
     try {
       const connection = joinVoiceChannel({
         channelId: voiceChannel.id,
@@ -110,12 +115,10 @@ client.on('messageCreate', async (message) => {
         adapterCreator: message.guild.voiceAdapterCreator,
         selfDeaf: true,
       });
-
       await entersState(connection, VoiceConnectionStatus.Ready, 30_000).catch(() => {
         connection.destroy();
-        throw new Error('تعذّر الاتصال بالقناة الصوتية، حاول مرة أخرى.');
+        throw new Error('تعذّر الاتصال الصوتي. جرب !reconnect وحاول مجدداً.');
       });
-
       await distube.play(voiceChannel, query, {
         message,
         textChannel: message.channel,
@@ -126,11 +129,10 @@ client.on('messageCreate', async (message) => {
     }
   }
 
-  // ─── !skip ──────────────────────────────────────────────────────
+  // ─── !skip ────────────────────────────────────────────────────
   else if (command === 'skip' || command === 's') {
     const queue = distube.getQueue(message.guildId);
     if (!queue) return message.reply({ embeds: [errorEmbed('📭 لا يوجد شيء يعزف!')] });
-
     try {
       await queue.skip();
       message.reply({
@@ -139,12 +141,12 @@ client.on('messageCreate', async (message) => {
     } catch {
       distube.stop(message.guildId);
       message.reply({
-        embeds: [new EmbedBuilder().setColor('#FFA500').setDescription('⏹️ آخر أغنية، انتهت القائمة. البوت لا يزال في القناة.')],
+        embeds: [new EmbedBuilder().setColor('#FFA500').setDescription('⏹️ آخر أغنية. البوت لا يزال في القناة.')],
       });
     }
   }
 
-  // ─── !stop ──────────────────────────────────────────────────────
+  // ─── !stop ────────────────────────────────────────────────────
   else if (command === 'stop' || command === 'st') {
     const queue = distube.getQueue(message.guildId);
     if (!queue) return message.reply({ embeds: [errorEmbed('📭 لا يوجد شيء يعزف!')] });
@@ -153,24 +155,22 @@ client.on('messageCreate', async (message) => {
       embeds: [
         new EmbedBuilder()
           .setColor('#FFA500')
-          .setDescription('⏹️ تم إيقاف الموسيقى ومسح القائمة.\nالبوت لا يزال في القناة. استخدم `!leave` للمغادرة.'),
+          .setDescription('⏹️ تم إيقاف الموسيقى.\nالبوت لا يزال في القناة — استخدم `!leave` للمغادرة.'),
       ],
     });
   }
 
-  // ─── !queue ─────────────────────────────────────────────────────
+  // ─── !queue ───────────────────────────────────────────────────
   else if (command === 'queue' || command === 'q') {
     const queue = distube.getQueue(message.guildId);
     if (!queue || !queue.songs.length) {
-      return message.reply({ embeds: [errorEmbed('📭 القائمة فارغة! استخدم `!play` لإضافة أغنية.')] });
+      return message.reply({ embeds: [errorEmbed('📭 القائمة فارغة!')] });
     }
-
     const current = queue.songs[0];
     const list = queue.songs
       .slice(1, 11)
       .map((s, i) => `**${i + 1}.** ${s.name} — \`${s.formattedDuration}\``)
       .join('\n');
-
     const embed = new EmbedBuilder()
       .setColor('#5865F2')
       .setTitle('🎶 قائمة الأغاني')
@@ -181,7 +181,7 @@ client.on('messageCreate', async (message) => {
     message.reply({ embeds: [embed] });
   }
 
-  // ─── !pause ─────────────────────────────────────────────────────
+  // ─── !pause ───────────────────────────────────────────────────
   else if (command === 'pause') {
     const queue = distube.getQueue(message.guildId);
     if (!queue) return message.reply({ embeds: [errorEmbed('📭 لا يوجد شيء يعزف!')] });
@@ -191,7 +191,7 @@ client.on('messageCreate', async (message) => {
     });
   }
 
-  // ─── !resume ────────────────────────────────────────────────────
+  // ─── !resume ──────────────────────────────────────────────────
   else if (command === 'resume' || command === 'r') {
     const queue = distube.getQueue(message.guildId);
     if (!queue) return message.reply({ embeds: [errorEmbed('📭 لا يوجد شيء متوقف!')] });
@@ -201,13 +201,13 @@ client.on('messageCreate', async (message) => {
     });
   }
 
-  // ─── !volume ────────────────────────────────────────────────────
+  // ─── !volume ──────────────────────────────────────────────────
   else if (command === 'volume' || command === 'v') {
     const queue = distube.getQueue(message.guildId);
     if (!queue) return message.reply({ embeds: [errorEmbed('📭 لا يوجد شيء يعزف!')] });
     const vol = parseInt(args[0]);
     if (isNaN(vol) || vol < 1 || vol > 100) {
-      return message.reply({ embeds: [errorEmbed('🔊 أدخل رقماً بين 1 و 100\nمثال: `!volume 75`')] });
+      return message.reply({ embeds: [errorEmbed('🔊 أدخل رقماً بين 1 و 100')] });
     }
     queue.setVolume(vol);
     message.reply({
@@ -215,7 +215,7 @@ client.on('messageCreate', async (message) => {
     });
   }
 
-  // ─── !loop ──────────────────────────────────────────────────────
+  // ─── !loop ────────────────────────────────────────────────────
   else if (command === 'loop' || command === 'l') {
     const queue = distube.getQueue(message.guildId);
     if (!queue) return message.reply({ embeds: [errorEmbed('📭 لا يوجد شيء يعزف!')] });
@@ -226,7 +226,7 @@ client.on('messageCreate', async (message) => {
     });
   }
 
-  // ─── !nowplaying ────────────────────────────────────────────────
+  // ─── !nowplaying ──────────────────────────────────────────────
   else if (command === 'nowplaying' || command === 'np') {
     const queue = distube.getQueue(message.guildId);
     if (!queue) return message.reply({ embeds: [errorEmbed('📭 لا يوجد شيء يعزف!')] });
@@ -243,7 +243,7 @@ client.on('messageCreate', async (message) => {
     message.reply({ embeds: [embed] });
   }
 
-  // ─── !reconnect ─────────────────────────────────────────────────
+  // ─── !reconnect ───────────────────────────────────────────────
   else if (command === 'reconnect' || command === 'rc') {
     if (!voiceChannel) {
       return message.reply({ embeds: [errorEmbed('🔇 ادخل قناة صوتية أولاً!')] });
@@ -251,53 +251,111 @@ client.on('messageCreate', async (message) => {
     try {
       const existing = getVoiceConnection(message.guild.id);
       if (existing) existing.destroy();
-
       const connection = joinVoiceChannel({
         channelId: voiceChannel.id,
         guildId: message.guild.id,
         adapterCreator: message.guild.voiceAdapterCreator,
         selfDeaf: true,
       });
-
       await entersState(connection, VoiceConnectionStatus.Ready, 15_000);
       message.reply({
         embeds: [
           new EmbedBuilder()
             .setColor('#00C48C')
-            .setDescription('✅ أُعيد الاتصال! الآن استخدم `!play` لتشغيل أغنية.'),
+            .setDescription('✅ أُعيد الاتصال! استخدم `!play` لتشغيل أغنية.'),
         ],
       });
     } catch {
-      message.reply({ embeds: [errorEmbed('❌ فشل إعادة الاتصال. حاول مرة أخرى.')] });
+      message.reply({ embeds: [errorEmbed('❌ فشل إعادة الاتصال.')] });
     }
   }
 
-  // ─── !help ──────────────────────────────────────────────────────
+  // ─── !help ────────────────────────────────────────────────────
   else if (command === 'help' || command === 'h') {
     const embed = new EmbedBuilder()
       .setColor('#5865F2')
       .setTitle('📖 قائمة الأوامر')
       .addFields(
-        { name: '`!join` أو `!j`', value: 'الانضمام للقناة الصوتية بدون تشغيل', inline: false },
-        { name: '`!leave` أو `!dc`', value: 'مغادرة القناة الصوتية', inline: false },
-        { name: '`!play [رابط/اسم]`', value: 'تشغيل أغنية أو إضافتها للقائمة', inline: false },
-        { name: '`!skip` أو `!s`', value: 'تخطي الأغنية الحالية', inline: true },
-        { name: '`!stop` أو `!st`', value: 'إيقاف الموسيقى (البوت يبقى)', inline: true },
-        { name: '`!queue` أو `!q`', value: 'قائمة الأغاني', inline: true },
+        { name: '`!join` / `!j`', value: 'انضمام للقناة بدون تشغيل', inline: false },
+        { name: '`!leave` / `!dc`', value: 'مغادرة القناة الصوتية', inline: false },
+        { name: '`!play [رابط/اسم]`', value: 'تشغيل أغنية أو إضافتها', inline: false },
+        { name: '`!skip` / `!s`', value: 'تخطي الأغنية', inline: true },
+        { name: '`!stop` / `!st`', value: 'إيقاف (البوت يبقى)', inline: true },
+        { name: '`!queue` / `!q`', value: 'قائمة الأغاني', inline: true },
         { name: '`!pause`', value: 'توقف مؤقت', inline: true },
-        { name: '`!resume` أو `!r`', value: 'استئناف', inline: true },
+        { name: '`!resume` / `!r`', value: 'استئناف', inline: true },
         { name: '`!volume [1-100]`', value: 'مستوى الصوت', inline: true },
-        { name: '`!loop` أو `!l`', value: 'وضع التكرار', inline: true },
-        { name: '`!nowplaying` أو `!np`', value: 'الأغنية الحالية', inline: true },
-        { name: '`!reconnect` أو `!rc`', value: 'إعادة الاتصال', inline: true },
+        { name: '`!loop` / `!l`', value: 'وضع التكرار', inline: true },
+        { name: '`!nowplaying` / `!np`', value: 'الأغنية الحالية', inline: true },
+        { name: '`!reconnect` / `!rc`', value: 'إعادة الاتصال', inline: true },
       )
       .setFooter({ text: '🎵 البوت يبقى في القناة حتى تستخدم !leave' });
     message.reply({ embeds: [embed] });
   }
 });
 
-// ─── أحداث DisTube ─────────────────────────────────────────────────
+// ─── أحداث DisTube ────────────────────────────────────────────────
 distube.on('playSong', (queue, song) => {
   const embed = new EmbedBuilder()
     .setColor('#00C48C')
-    .setTitle('🎵 يعز
+    .setTitle('🎵 يعزف الآن')
+    .setDescription(`[${song.name}](${song.url})`)
+    .addFields(
+      { name: '⏱️ المدة', value: `\`${song.formattedDuration}\``, inline: true },
+      { name: '🔊 الصوت', value: `${queue.volume}%`, inline: true },
+      { name: '👤 طلب من', value: `${song.user}`, inline: true }
+    );
+  if (song.thumbnail) embed.setThumbnail(song.thumbnail);
+  queue.textChannel?.send({ embeds: [embed] });
+});
+
+distube.on('addSong', (queue, song) => {
+  queue.textChannel?.send({
+    embeds: [
+      new EmbedBuilder()
+        .setColor('#5865F2')
+        .setDescription(`✅ أُضيفت **${song.name}** للقائمة (رقم ${queue.songs.length})`),
+    ],
+  });
+});
+
+distube.on('addList', (queue, playlist) => {
+  queue.textChannel?.send({
+    embeds: [
+      new EmbedBuilder()
+        .setColor('#5865F2')
+        .setDescription(`✅ أُضيفت قائمة **${playlist.name}** (${playlist.songs.length} أغنية)`),
+    ],
+  });
+});
+
+distube.on('finish', (queue) => {
+  queue.textChannel?.send({
+    embeds: [
+      new EmbedBuilder()
+        .setColor('#5865F2')
+        .setDescription('✅ انتهت الأغاني. البوت لا يزال في القناة.\nأضف المزيد بـ `!play` أو اكتب `!leave` للمغادرة.'),
+    ],
+  });
+});
+
+distube.on('error', async (channel, error) => {
+  console.error('DisTube Error:', error.message);
+  if (
+    error.message.toLowerCase().includes('cannot connect') ||
+    error.message.toLowerCase().includes('voice') ||
+    error.message.toLowerCase().includes('connection')
+  ) {
+    channel?.send({
+      embeds: [
+        new EmbedBuilder()
+          .setColor('#FFA500')
+          .setDescription('⚠️ مشكلة اتصال صوتي. جرب `!reconnect` ثم `!play` مجدداً.'),
+      ],
+    });
+  } else {
+    channel?.send({ embeds: [errorEmbed(`❌ خطأ: ${error.message}`)] });
+  }
+});
+
+client.login(process.env.DISCORD_TOKEN);
