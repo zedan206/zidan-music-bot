@@ -10,7 +10,7 @@
   "dependencies": {
     "discord.js": "^14.16.3",
     "distube": "^5.0.7",
-    "@distube/yt-dlp": "^2.0.4",
+    "@distube/yt-dlp": "^1.0.4",
     "dotenv": "^16.4.5"
   },
   "devDependencies": {
@@ -19,6 +19,5 @@
   "engines": {
     "node": ">=18.0.0"
   },
-  "keywords": ["discord", "bot", "music", "distube"],
   "license": "MIT"
 }
